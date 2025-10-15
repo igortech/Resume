@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "App Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "API Server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/api.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Launch Both",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Run Both Services",
+            "configurations": ["App Bot", "API Server"]
+        }
+    ]
+}
