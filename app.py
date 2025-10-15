@@ -1,5 +1,6 @@
 import os
 import tempfile
+import logging
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,7 +12,7 @@ from file_processor import FileProcessor
 bot = Bot(token="5846524648:AAHHUAFkJxHWCNMvqp_FlVNk5iWxnQeR3_M")
 dp = Dispatcher()
 file_processor = FileProcessor()
-
+logger = logging.getLogger(__name__)
 #bot.send_message(5846524648, "Бот запущен!")
 
 
@@ -20,7 +21,8 @@ def log_action(action: str, user_id: int, username: str = "", additional_info: s
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user_info = f"@{username}" if username else f"ID:{user_id}"
     info = f" | {additional_info}" if additional_info else ""
-    print(f"[{timestamp}] {action} | User: {user_info}{info}")
+    message = f"[{timestamp}] {action} | User: {user_info}{info}"
+    logger.info(message)
 
 # Обработчик команды /start
 @dp.message(Command("start"))
@@ -54,34 +56,30 @@ async def handle_document(message: types.Message):
         log_action("FILE_DOWNLOADED", user_id, username, f"Path: {file_path}")
         
         try:
-            file_processor()
-            if message.document.file_name.endswith('.pdf'):
-                log_action("PROCESSING_PDF", user_id, username, f"File: {file_name}")
-                with open(file_path, 'rb') as f:
-                    reader = PyPDF2.PdfReader(f)
-                    text = "\n".join([page.extract_text() for page in reader.pages])
-                    pages_count = len(reader.pages)
-                    log_action("PDF_PROCESSED", user_id, username, f"Pages: {pages_count}")
-            else:
-                log_action("PROCESSING_DOCX", user_id, username, f"File: {file_name}")
-                text = docx2txt.process(file_path)
-                log_action("DOCX_PROCESSED", user_id, username, f"File: {file_name}")
+            # Обработка файла через FileProcessor
+            result = file_processor.process_resume(file_path, user_id)
+        
+            # Добавляем request_id в ответ
+            result["request_id"] = user_id
             
-            # Обрезаем текст если он слишком длинный
-            text_length = len(text)
-            if text_length > 4000:
-                text = text[:4000] + "..."
-                log_action("TEXT_TRIMMED", user_id, username, f"Original: {text_length} chars")
-                
-            log_action("TEXT_EXTRACTED", user_id, username, f"Chars: {min(text_length, 4000)}")
-            await message.answer(f"Текст резюме:\n\n{text}")
+            log_action("REQUEST_COMPLETED", user_id,
+                    f"Skills found: {len(result['skills'])}")
+
+            await message.answer(f"Текст резюме:\n\n{result["text"]}")
             log_action("RESPONSE_SENT", user_id, username, "Text extraction successful")
             
         except Exception as e:
             error_msg = f"Ошибка при обработке файла: {str(e)}"
             log_action("PROCESSING_ERROR", user_id, username, f"Error: {str(e)}")
             await message.answer(error_msg)
-
+            
+        finally:
+            # Очистка временного файла
+            try:
+                os.unlink(file_path)
+                logger.info(f"[{user_id}] Временный файл удален: {file_path}")
+            except Exception as e:
+                logger.warning(f"[{user_id}] Не удалось удалить временный файл: {str(e)}")
 # Заглушки вакансий
 VACANCIES = [
     {"title": "Python разработчик", "company": "TechCorp"},

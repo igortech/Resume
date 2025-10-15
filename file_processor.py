@@ -1,3 +1,4 @@
+from datetime import datetime
 import docx2txt
 import PyPDF2
 import os
@@ -39,53 +40,60 @@ class FileProcessor:
         return text
 
     @staticmethod
-    def validate_file(file_content: bytes, filename: str) -> Tuple[bool, Optional[str]]:
+    def validate_file(file_length: bytes, filename: str) -> Tuple[bool, Optional[str]]:
         if not filename:
             return False, "Имя файла не может быть пустым"
             
         if not filename.endswith(('.pdf', '.docx')):
             return False, "Поддерживаются только PDF и DOCX файлы"
             
-        if len(file_content) == 0:
+        if file_length == 0:
             return False, "Файл пустой"
             
-        if len(file_content) > 10 * 1024 * 1024:  # 10MB
+        if file_length > 10 * 1024 * 1024:  # 10MB
             return False, "Файл слишком большой (максимум 10MB)"
             
         return True, None
 
-    def process_resume(self, file_content: bytes, filename: str, request_id: str) -> dict:
+    def process_resume(self, filename: str, request_id: str) -> dict:
         logger.info(f"[{request_id}] Начало обработки резюме: {filename}")
 
         # Чтение содержимого файла
         #content = await file.read()
 
         # Валидация файла
-        is_valid, error_message = self.validate_file(file_content, filename)
+        file_size = os.path.getsize(filename)
+        is_valid, error_message = self.validate_file(file_size, filename)
         if not is_valid:
             logger.error(f"[{request_id}] Ошибка валидации: {error_message}")
             raise ValueError(error_message)
         
-
-
         try:
-            file_size = len(file_content)
-            logger.info(f"[{request_id}] Файл сохранен временно: {tmp_path}, размер: {file_size} байт")
+
             
             # Обработка в зависимости от типа файла
             if filename.endswith('.pdf'):
-                text, pages_count = self.process_pdf(tmp_path, request_id)
+                text, pages_count = self.process_pdf(filename, request_id)
                 file_info = {"pages": pages_count, "type": "pdf"}
             else:
-                text = self.process_docx(tmp_path, request_id)
+                text = self.process_docx(filename, request_id)
                 file_info = {"type": "docx"}
             
             # Извлечение навыков
             skills = self.extract_skills(text)
             logger.info(f"[{request_id}] Навыки извлечены: {len(skills)} найдено")
             
+            # Обрезаем текст если он слишком длинный
+            text_length = len(text)
+            if text_length > 4000:
+                text = text[:4000] + "..."
+                log_action("TEXT_TRIMMED", request_id, f"Original: {text_length} chars")
+                
+            log_action("TEXT_EXTRACTED", request_id, f"Chars: {min(text_length, 4000)}")
+
             # Формирование результата
             result = {
+                "text": text,
                 "skills": skills,
                 "text_length": len(text),
                 "file_info": file_info,
@@ -103,11 +111,11 @@ class FileProcessor:
         except Exception as e:
             logger.error(f"[{request_id}] Ошибка обработки файла: {str(e)}")
             raise Exception(f"Ошибка обработки файла: {str(e)}")
-            
-        finally:
-            # Очистка временного файла
-            try:
-                os.unlink(tmp_path)
-                logger.info(f"[{request_id}] Временный файл удален: {tmp_path}")
-            except Exception as e:
-                logger.warning(f"[{request_id}] Не удалось удалить временный файл: {str(e)}")
+
+def log_action(action: str, request_id: int, additional_info: str = ""):
+    """Логирование действий"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_info = f"ID:{request_id}"
+    info = f" | {additional_info}" if additional_info else ""
+    message = f"[{timestamp}] {action} | User: {user_info}{info}"
+    logger.info(message)

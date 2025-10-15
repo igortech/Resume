@@ -41,9 +41,9 @@ async def analyze_resume(file: UploadFile):
         # Чтение содержимого файла
         content = await file.read()
         # Создание временного файла
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
+        with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[1]) as tmp:
             tmp.write(content)
-
+            logger.info(f"[{request_id}] Файл сохранен временно: {tmp.name}, размер: {len(content)} байт")
             # Обработка файла через FileProcessor
             result = file_processor.process_resume(tmp.name, request_id)
         
@@ -66,7 +66,7 @@ async def analyze_resume(file: UploadFile):
         log_request(request_id, "PROCESSING_ERROR", 
                    f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
+   
 @app.get("/")
 async def root():
     logger.info("Root endpoint accessed")
